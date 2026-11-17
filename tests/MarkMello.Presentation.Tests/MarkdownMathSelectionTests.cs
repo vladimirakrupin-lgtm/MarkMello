@@ -40,11 +40,28 @@ public sealed class MarkdownMathSelectionTests
 
             var formulaStart = InlineText.IndexOf(Formula, StringComparison.Ordinal);
             var layout = GetTextLayout(paragraph);
+            var formulaRects = layout.GetSelectionRects(new DocumentTextRange(formulaStart, formulaStart + Formula.Length));
+            Assert.NotEmpty(formulaRects);
+            var formulaRect = formulaRects[0];
+            Assert.True(formulaRect.Width > 1, "formula must paint wider than a 1px caret box");
+
+            // A point inside the painted formula box resolves onto the formula.
+            Assert.True(
+                layout.IsBeyondFormulaStart(
+                    paragraph.StyledText.Math[0],
+                    new Point(formulaRect.X + formulaRect.Width - 1, formulaRect.Y + 1)),
+                "a point inside the painted formula must resolve onto the formula");
+
+            // A point clearly inside the trailing text (center of the space
+            // after the formula) is not on the formula, so clicks there must
+            // not snap to the formula start.
             var afterFormula = layout.GetSelectionRects(new DocumentTextRange(formulaStart + Formula.Length, formulaStart + Formula.Length + 1));
             Assert.NotEmpty(afterFormula);
+            var afterRect = afterFormula[0];
+            var trailingPoint = new Point(afterRect.X + afterRect.Width / 2, afterRect.Y + 1);
             Assert.True(
-                layout.IsBeyondFormulaStart(paragraph.StyledText.Math[0], new Point(afterFormula[0].X - 1, afterFormula[0].Y + 1)) is false,
-                "the point right before the trailing text is not on the formula");
+                layout.IsBeyondFormulaStart(paragraph.StyledText.Math[0], trailingPoint) is false,
+                "the point inside the trailing text is not on the formula");
         }, CancellationToken.None);
 
     [Fact]

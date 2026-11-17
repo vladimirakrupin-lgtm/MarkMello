@@ -272,11 +272,16 @@ internal sealed class MarkdownDisplayLayoutModel
             // One drawable run substitutes the whole canonical TeX range: the
             // first display position draws the formula, the remaining ones are
             // zero-width continuations so caret/selection maps stay 1:1.
+            // NOTE: DisplayLength must be 1 (not canonicalLength) — otherwise
+            // the Math segment overlaps the continuation segments and
+            // FindSegmentIndex keeps returning the Math run for every TeX
+            // character, painting the formula N times and exploding line
+            // width/height (s1.md duplication + huge gaps).
             var canonicalLength = math.Range.Length;
             _segments.Add(new MarkdownDisplaySegment(
                 MarkdownDisplaySegmentKind.Math,
                 _displayOffset,
-                canonicalLength,
+                1,
                 math.Range,
                 math.Latex,
                 math.Style,

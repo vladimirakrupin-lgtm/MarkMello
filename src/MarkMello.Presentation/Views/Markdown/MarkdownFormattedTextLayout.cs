@@ -233,6 +233,8 @@ internal sealed class MarkdownFormattedTextLayout : IDisposable
     /// True when <paramref name="point"/> is on a formula but to the right of the
     /// small box its first canonical character reports: the formula is painted
     /// once, at the start of its range, and the click must land there (ADR-0010).
+    /// The point must also be inside the formula box horizontally — clicks on
+    /// trailing text on the same line are not on the formula.
     /// </summary>
     public bool IsBeyondFormulaStart(MarkdownMathSpan formula, Point point)
     {
@@ -258,7 +260,10 @@ internal sealed class MarkdownFormattedTextLayout : IDisposable
                     continue;
                 }
 
-                return point.X > bounds.Rectangle.X + 1 && point.Y >= line.Y && point.Y <= line.Y + line.TextLine.Height;
+                var inY = point.Y >= line.Y && point.Y <= line.Y + line.TextLine.Height;
+                var pastLeft = point.X > bounds.Rectangle.X + 1;
+                var insideRight = point.X <= bounds.Rectangle.X + bounds.Rectangle.Width;
+                return pastLeft && insideRight && inY;
             }
         }
 
