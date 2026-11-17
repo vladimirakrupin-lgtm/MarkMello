@@ -230,9 +230,9 @@ internal sealed class MarkdownFormattedTextLayout : IDisposable
     }
 
     /// <summary>
-    /// True when <paramref name="point"/> is to the right of the 1px box the
-    /// formula's first character reports, i.e. the click is on the painted
-    /// formula but past the point where its canonical range starts.
+    /// True when <paramref name="point"/> is on a formula but to the right of the
+    /// small box its first canonical character reports: the formula is painted
+    /// once, at the start of its range, and the click must land there (ADR-0010).
     /// </summary>
     public bool IsBeyondFormulaStart(MarkdownMathSpan formula, Point point)
     {
@@ -258,7 +258,7 @@ internal sealed class MarkdownFormattedTextLayout : IDisposable
                     continue;
                 }
 
-                return point.X > (bounds.Rectangle.X + 1) && point.Y >= line.Y && point.Y <= line.Y + line.TextLine.Height;
+                return point.X > bounds.Rectangle.X + 1 && point.Y >= line.Y && point.Y <= line.Y + line.TextLine.Height;
             }
         }
 
