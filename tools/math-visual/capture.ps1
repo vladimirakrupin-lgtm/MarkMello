@@ -9,6 +9,11 @@
     out/. Because only the window region is copied, other windows cannot leak
     into the frame.
 
+    The script manages exactly one process: the instance it starts itself. It
+    is closed again when the run finishes, and a MarkMello that is already
+    running is never focused, captured or terminated — the run stops and asks
+    for the running instance to be closed manually.
+
     With -ScrollStep the tool additionally sends Page Down and captures one frame
     per page, so a whole document can be reviewed formula by formula.
 
@@ -124,41 +129,89 @@ if (Test-Path $outDir) {
 }
 New-Item -ItemType Directory -Path $outDir -Force | Out-Null
 
-$proc = Get-Process -Name 'MarkMello' -ErrorAction SilentlyContinue | Select-Object -First 1
-
-# A running instance keeps its own document: reusing it would silently capture
-# the WRONG file. Restart unless it already shows exactly the requested one.
+# This script owns exactly one process: the MarkMello.exe it starts below.
+# Any other MarkMello instance belongs to the user and is never focused,
+# captured or terminated. Unsaved edits in a foreign instance must survive
+# a verification run, so a pre-existing instance is a hard stop, not a
+# restart.
 $wantedName = Split-Path -Leaf $Document
-if ($null -ne $proc) {
+$foreign = @(Get-Process -Name 'MarkMello' -ErrorAction SilentlyContinue)
+if ($foreign.Count -gt 0) {
+    $titles = ($foreign | ForEach-Object { "'" + $_.MainWindowTitle + "'" }) -join ', '
+    throw "MarkMello is already running ($titles). This tool only manages the instance it starts itself and never terminates a process it did not launch: close the running instance manually (save your work first) and re-run."
+}
+
+$proc = Start-Process -FilePath $Exe -ArgumentList "`"$Document`"" -PassThru
+
+try {
+    $hwnd = [IntPtr]::Zero
+    $deadline = (Get-Date).AddSeconds(30)
+    while ((Get-Date) -lt $deadline) {
+        Start-Sleep -Milliseconds 300
+        $proc.Refresh()
+        if ($proc.HasExited) {
+            throw 'MarkMello exited before a window appeared.'
+        }
+        if ($proc.MainWindowHandle -ne [IntPtr]::Zero) {
+            $hwnd = $proc.MainWindowHandle
+            break
+        }
+    }
+    if ($hwnd -eq [IntPtr]::Zero) {
+        throw 'MarkMello window did not appear within 30 seconds.'
+    }
+
+    # Sanity check for OUR window only. The title must name the document this
+    # run was asked to capture; a mismatch means we would photograph the wrong
+    # file, so the run aborts without touching the process's document.
     $proc.Refresh()
     $currentTitle = $proc.MainWindowTitle
     if ($currentTitle -notlike "*$wantedName*") {
-        Write-Output ("RESTART: open document was '{0}', wanted '{1}'" -f $currentTitle, $wantedName)
-        $proc | Stop-Process -Force
-        Start-Sleep -Seconds 1
-        $proc = $null
+        throw ("Started MarkMello for '{0}', but its window title is '{1}'. Refusing to capture a document that was not requested." -f $wantedName, $currentTitle)
     }
-}
 
-if ($null -eq $proc) {
-    $proc = Start-Process -FilePath $Exe -ArgumentList "`"$Document`"" -PassThru
-}
+    Focus-Window
 
-$hwnd = [IntPtr]::Zero
-$deadline = (Get-Date).AddSeconds(30)
-while ((Get-Date) -lt $deadline) {
-    Start-Sleep -Milliseconds 300
-    $proc.Refresh()
-    if ($proc.HasExited) {
-        throw 'MarkMello exited before a window appeared.'
+    if ($Pages -le 1) {
+        Capture-Window 'window'
     }
-    if ($proc.MainWindowHandle -ne [IntPtr]::Zero) {
-        $hwnd = $proc.MainWindowHandle
-        break
+    else {
+        for ($page = 1; $page -le $Pages; $page++) {
+            Capture-Window ('page-{0:D2}' -f $page)
+            if ($page -lt $Pages) {
+                # Focus can drift between pages (a popup, an update toast);
+                # re-assert it so the next frame still contains our window.
+                if ((Get-ForegroundProcessName) -ne 'MarkMello') {
+                    [void][MmCaptureNative]::SetForegroundWindow($hwnd)
+                    Start-Sleep -Milliseconds 300
+                }
+                [System.Windows.Forms.SendKeys]::SendWait('{PGDN}')
+                Start-Sleep -Milliseconds 900
+            }
+        }
     }
+
+    Write-Output ("WINDOW pages={0} slices={1} overlap={2}" -f $Pages, $Slices, $Overlap)
 }
-if ($hwnd -eq [IntPtr]::Zero) {
-    throw 'MarkMello window did not appear within 30 seconds.'
+finally {
+    # Graceful close only, and only for the process this script started, so
+    # nothing else ever loses unsaved work because of a verification run.
+    if ($null -ne $proc) {
+        try {
+            $proc.Refresh()
+            if (-not $proc.HasExited) {
+                if (-not $proc.CloseMainWindow()) {
+                    Write-Output ("WARN: could not ask the capture instance (pid {0}) to close; leaving it running." -f $proc.Id)
+                }
+                else {
+                    [void]$proc.WaitForExit(10000)
+                }
+            }
+        }
+        catch {
+            Write-Output ("WARN: closing the capture instance failed: {0}" -f $_.Exception.Message)
+        }
+    }
 }
 
 function Focus-Window {
@@ -243,25 +296,3 @@ function Capture-Window([string]$prefix) {
     $bmp.Dispose()
 }
 
-Focus-Window
-
-if ($Pages -le 1) {
-    Capture-Window 'window'
-}
-else {
-    for ($page = 1; $page -le $Pages; $page++) {
-        Capture-Window ('page-{0:D2}' -f $page)
-        if ($page -lt $Pages) {
-            # Focus can drift between pages (a popup, an update toast); re-assert
-            # it so the next frame still contains our window.
-            if ((Get-ForegroundProcessName) -ne 'MarkMello') {
-                [void][MmCaptureNative]::SetForegroundWindow($hwnd)
-                Start-Sleep -Milliseconds 300
-            }
-            [System.Windows.Forms.SendKeys]::SendWait('{PGDN}')
-            Start-Sleep -Milliseconds 900
-        }
-    }
-}
-
-Write-Output ("WINDOW pages={0} slices={1} overlap={2}" -f $Pages, $Slices, $Overlap)
