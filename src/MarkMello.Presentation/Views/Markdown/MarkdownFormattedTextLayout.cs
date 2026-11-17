@@ -169,7 +169,7 @@ internal sealed class MarkdownFormattedTextLayout : IDisposable
         var displayEnd = _displayModel.GetDisplayEndForCanonicalCaret(canonicalEnd);
         return displayEnd <= displayStart
             ? Array.Empty<Rect>()
-            : GetDisplayRects(displayStart, displayEnd - displayStart);
+            : CollectDisplayRects(displayStart, displayEnd - displayStart);
     }
 
     public int GetCanonicalCaretOffset(Point point)
@@ -314,7 +314,7 @@ internal sealed class MarkdownFormattedTextLayout : IDisposable
         Height = y;
     }
 
-    private IReadOnlyList<Rect> GetDisplayRects(int displayStart, int displayLength)
+    private IReadOnlyList<Rect> CollectDisplayRects(int displayStart, int displayLength)
     {
         if (displayLength <= 0 || _lines.Count == 0)
         {
