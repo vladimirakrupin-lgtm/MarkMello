@@ -187,6 +187,12 @@ internal sealed class MarkdownFormattedTextLayout : IDisposable
         return _displayModel.GetCanonicalCaretForDisplayCaret(displayCaret);
     }
 
+    private int GetLineCanonicalEnd(FormattedLine line)
+    {
+        var lineEnd = line.TextLine.FirstTextSourceIndex + line.TextLine.Length;
+        return _displayModel.GetCanonicalCaretForDisplayCaret(lineEnd);
+    }
+
     public bool IsPointInsideText(Point point)
     {
         if (_lines.Count == 0)
@@ -200,6 +206,63 @@ internal sealed class MarkdownFormattedTextLayout : IDisposable
             && point.Y <= line.Y + line.TextLine.Height
             && point.X >= 0
             && point.X <= line.TextLine.WidthIncludingTrailingWhitespace;
+    }
+
+    /// <summary>
+    /// Canonical offset the reader points at. The caret comes from the text
+    /// formatter; at or past the end of a line it has no character to hit and
+    /// falls back to the line start, so that case maps to the end of the line's
+    /// canonical range explicitly (ADR-0010: canonical offsets).
+    /// </summary>
+    public int GetCanonicalOffset(Point point)
+    {
+        var caret = GetCanonicalCaretOffset(point);
+        if (_lines.Count == 0)
+        {
+            return caret;
+        }
+
+        var line = _lines[FindLineIndex(point.Y)];
+        var nearLineEnd = point.X >= Math.Max(0, line.TextLine.WidthIncludingTrailingWhitespace - 1);
+        return nearLineEnd && caret < GetLineCanonicalEnd(line) && point.X > 0
+            ? GetLineCanonicalEnd(line)
+            : caret;
+    }
+
+    /// <summary>
+    /// True when <paramref name="point"/> is to the right of the 1px box the
+    /// formula's first character reports, i.e. the click is on the painted
+    /// formula but past the point where its canonical range starts.
+    /// </summary>
+    public bool IsBeyondFormulaStart(MarkdownMathSpan formula, Point point)
+    {
+        if (_lines.Count == 0 || formula.Range.IsEmpty)
+        {
+            return false;
+        }
+
+        var displayStart = _displayModel.GetDisplayStartForCanonicalCaret(formula.Range.Start);
+        foreach (var line in _lines)
+        {
+            var lineStart = line.TextLine.FirstTextSourceIndex;
+            var lineEnd = lineStart + line.TextLine.Length;
+            if (displayStart < lineStart || displayStart >= lineEnd)
+            {
+                continue;
+            }
+
+            foreach (var bounds in line.TextLine.GetTextBounds(displayStart, 1))
+            {
+                if (bounds.Rectangle.Width <= 1)
+                {
+                    continue;
+                }
+
+                return point.X > (bounds.Rectangle.X + 1) && point.Y >= line.Y && point.Y <= line.Y + line.TextLine.Height;
+            }
+        }
+
+        return false;
     }
 
     public void Dispose()
@@ -275,17 +338,16 @@ internal sealed class MarkdownFormattedTextLayout : IDisposable
             foreach (var bounds in line.TextLine.GetTextBounds(overlapStart, overlapEnd - overlapStart))
             {
                 var rect = bounds.Rectangle.Translate(new Vector(0, line.Y));
-                if (rect.Width > 0)
+                if (rect.Width <= 0)
                 {
-                    rects.Add(rect);
-                    continue;
+                    // Zero-width positions (the continuation characters of a
+                    // formula, ADR-0010) report no box of their own; the
+                    // formula they belong to is drawn inside this line, so
+                    // the highlight covers the part of the line it stands for.
+                    rect = new Rect(rect.X, line.Y, 1, line.TextLine.Height);
                 }
 
-                // Zero-width positions (the continuation characters of a
-                // formula, ADR-0010) report no box of their own; the character
-                // they stand for is painted inside their line, so the reader's
-                // highlight has to cover that line.
-                rects.Add(new Rect(rect.X, line.Y, rect.Width, line.TextLine.Height));
+                rects.Add(rect);
             }
         }
 
@@ -316,4 +378,3 @@ internal sealed class MarkdownFormattedTextLayout : IDisposable
     private static IReadOnlyDictionary<int, MarkdownInlineImageState> EmptyInlineImages { get; } =
         new Dictionary<int, MarkdownInlineImageState>();
 }
-

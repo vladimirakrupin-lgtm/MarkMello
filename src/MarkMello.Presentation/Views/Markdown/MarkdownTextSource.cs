@@ -71,8 +71,6 @@ internal sealed class MarkdownTextSource : ITextSource
             MarkdownDisplaySegmentKind.LineBreak => new TextEndOfLine(1),
             MarkdownDisplaySegmentKind.Image => CreateImageRun(segment),
             MarkdownDisplaySegmentKind.Math => CreateMathRun(segment),
-            MarkdownDisplaySegmentKind.MathContinuation => MarkdownMathContinuationTextRun.Instance,
-            MarkdownDisplaySegmentKind.CodePaddingLeft => MarkdownSpacerTextRun.Left(_padMetrics),
             MarkdownDisplaySegmentKind.CodePaddingRight => MarkdownSpacerTextRun.Right(_padMetrics),
             _ => new TextEndOfParagraph(1)
         };

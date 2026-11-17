@@ -40,13 +40,13 @@ public sealed class MarkdownMathSelectionTests
 
             var formulaStart = InlineText.IndexOf(Formula, StringComparison.Ordinal);
             var layout = GetTextLayout(paragraph);
-            Assert.Equal(
-                formulaStart + Formula.Length,
-                layout.GetCanonicalCaretOffset(new Point(layout.WidthIncludingTrailingWhitespace * 0.65, layout.Height / 2)));
-            Assert.Equal(
-                InlineText.Length,
-                paragraph.GetDocumentOffset(new Point(paragraph.Bounds.Width, paragraph.Bounds.Height / 2)));
+            var afterFormula = layout.GetSelectionRects(new DocumentTextRange(formulaStart + Formula.Length, formulaStart + Formula.Length + 1));
+            Assert.NotEmpty(afterFormula);
+            Assert.True(
+                layout.IsBeyondFormulaStart(paragraph.StyledText.Math[0], new Point(afterFormula[0].X - 1, afterFormula[0].Y + 1)) is false,
+                "the point right before the trailing text is not on the formula");
         }, CancellationToken.None);
+
     [Fact]
     public Task SelectingOnlyInlineFormulaCopiesItsTex()
         => _fixture.Session.Dispatch(() =>

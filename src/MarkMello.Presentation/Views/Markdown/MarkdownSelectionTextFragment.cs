@@ -329,7 +329,23 @@ internal sealed partial class MarkdownSelectionTextFragment : MarkdownDocumentSe
         }
 
         var layout = GetOrCreateTextLayout(Math.Max(Bounds.Width, 1));
-        var localOffset = Math.Clamp(layout.GetCanonicalCaretOffset(localPoint), 0, StyledText.Text.Length);
+        var hint = layout.GetCanonicalOffset(localPoint);
+        var localOffset = Math.Clamp(hint, 0, StyledText.Text.Length);
+
+        // A formula paints once, at the start of its canonical range, so a click
+        // anywhere on its box lands on its first character (ADR-0010). Without
+        // this a double-click on the formula would select one LaTeX character.
+        foreach (var formula in StyledText.Math)
+        {
+            if (localOffset > formula.Range.Start
+                && localOffset <= formula.Range.End
+                && layout.IsBeyondFormulaStart(formula, localPoint))
+            {
+                localOffset = formula.Range.Start;
+                break;
+            }
+        }
+
         if (preferPreviousCharacterAtBoundary && localOffset == StyledText.Text.Length && localOffset > 0)
         {
             localOffset--;
