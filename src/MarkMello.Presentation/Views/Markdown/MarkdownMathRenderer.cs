@@ -24,7 +24,9 @@ internal static class MarkdownMathRenderer
 {
     // Lazy text layout re-runs Measure/Draw on every rebuild (typing in the
     // editor preview, resize, theme change). Parsing LaTeX is the expensive
-    // part, so measured layouts are memoized by (latex, size, colour, style).
+    // part, so measured layouts are memoized by (normalized latex, size,
+    // colour, style). The key is normalized first: a formula and an alias that
+    // normalizes to the same source share one cache entry.
     // Dictionary + lock because edit-mode preview may measure off the UI thread.
     private static readonly Dictionary<MarkdownMathCacheKey, MarkdownMathLayout> Cache = new();
     private static readonly object CacheLock = new();
@@ -45,7 +47,12 @@ internal static class MarkdownMathRenderer
             return null;
         }
 
-        var key = new MarkdownMathCacheKey(latex, Math.Round(fontSize, 2), ResolveColor(foreground), isDisplay);
+        var normalized = MarkdownMathTexNormalizer.Normalize(latex);
+        var key = new MarkdownMathCacheKey(
+            normalized,
+            Math.Round(fontSize, 2),
+            ResolveColor(foreground),
+            isDisplay);
         lock (CacheLock)
         {
             if (Cache.TryGetValue(key, out var cached))
@@ -54,7 +61,6 @@ internal static class MarkdownMathRenderer
             }
         }
 
-        var normalized = MarkdownMathTexNormalizer.Normalize(latex);
         var layout = MeasureCore(normalized, fontSize, foreground, isDisplay);
         lock (CacheLock)
         {

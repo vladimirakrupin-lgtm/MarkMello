@@ -265,6 +265,29 @@ internal sealed partial class MarkdownSelectionTextFragment : MarkdownDocumentSe
             : new DocumentTextRange(DocumentRange.Start + localRange.Start, DocumentRange.Start + localRange.End);
     }
 
+    public override DocumentTextRange GetAdjacentDocumentRange(int localOffset)
+    {
+        if (StyledText.Math.Count == 0)
+        {
+            return DocumentTextRange.Empty;
+        }
+
+        // Formulas occupy their full TeX in the canonical text (ADR-0010), so a
+        // formula starts exactly where the preceding canonical offset ends.
+        var canonicalStart = DocumentRange.Start + localOffset;
+        foreach (var formula in StyledText.Math)
+        {
+            if (formula.Range.Start == canonicalStart)
+            {
+                return new DocumentTextRange(
+                    DocumentRange.Start + formula.Range.Start,
+                    DocumentRange.Start + formula.Range.End);
+            }
+        }
+
+        return DocumentTextRange.Empty;
+    }
+
     public override bool TryGetLinkAt(Point localPoint, out MarkdownLinkSpan linkSpan)
     {
         linkSpan = default;
@@ -327,12 +350,26 @@ internal sealed partial class MarkdownSelectionTextFragment : MarkdownDocumentSe
             ?? ResolveOptionalBrush("MmAccentSoftBrush")
             ?? Brushes.LightBlue;
 
-        foreach (var rect in layout.GetSelectionRects(new DocumentTextRange(
-                     Math.Clamp(selection.Start - DocumentRange.Start, 0, StyledText.Text.Length),
-                     Math.Clamp(selection.End - DocumentRange.Start, 0, StyledText.Text.Length))))
+        foreach (var rect in GetLocalHighlightRects(layout, selection))
         {
             context.FillRectangle(selectionBrush, rect);
         }
+    }
+
+    /// <summary>
+    /// Local rects for a document range inside this fragment, in layout
+    /// coordinates. The layout's canonical → display caret map collapses a
+    /// formula's whole TeX onto the box it is drawn in, so a range that covers
+    /// a formula (or the search match on it) highlights what is actually
+    /// painted (ADR-0010).
+    /// </summary>
+    private List<Rect> GetLocalHighlightRects(MarkdownFormattedTextLayout layout, DocumentTextRange range)
+    {
+        var localStart = Math.Clamp(range.Start - DocumentRange.Start, 0, StyledText.Text.Length);
+        var localEnd = Math.Clamp(range.End - DocumentRange.Start, 0, StyledText.Text.Length);
+        return localEnd <= localStart
+            ? []
+            : new List<Rect>(layout.GetSelectionRects(new DocumentTextRange(localStart, localEnd)));
     }
 
     private void DrawSearchHighlights(
@@ -390,7 +427,7 @@ internal sealed partial class MarkdownSelectionTextFragment : MarkdownDocumentSe
             return;
         }
 
-        foreach (var rect in layout.GetSelectionRects(new DocumentTextRange(localStart, localEnd)))
+        foreach (var rect in GetLocalHighlightRects(layout, range))
         {
             context.FillRectangle(brush, rect);
             if (pen is not null)
@@ -413,8 +450,17 @@ internal sealed partial class MarkdownSelectionTextFragment : MarkdownDocumentSe
         }
 
         var layout = GetOrCreateTextLayout(Math.Max(Bounds.Width, 1));
-        var offset = Math.Clamp(localOffset, 0, Math.Max(0, StyledText.Text.Length - 1));
+        var lastOffset = Math.Max(0, StyledText.Text.Length - 1);
+        var offset = Math.Clamp(localOffset, 0, lastOffset);
         var rects = layout.GetSelectionRects(new DocumentTextRange(offset, offset + 1));
+        if (rects.Count == 0 && offset > 0)
+        {
+            // Offsets that paint nothing of their own — a zero-width formula
+            // character, a line break — borrow the line of the character right
+            // before them, which is what the reader is looking at.
+            rects = layout.GetSelectionRects(new DocumentTextRange(offset - 1, offset));
+        }
+
         if (rects.Count == 0)
         {
             return false;

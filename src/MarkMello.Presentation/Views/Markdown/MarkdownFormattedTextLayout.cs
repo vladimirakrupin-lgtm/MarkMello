@@ -274,7 +274,18 @@ internal sealed class MarkdownFormattedTextLayout : IDisposable
 
             foreach (var bounds in line.TextLine.GetTextBounds(overlapStart, overlapEnd - overlapStart))
             {
-                rects.Add(bounds.Rectangle.Translate(new Vector(0, line.Y)));
+                var rect = bounds.Rectangle.Translate(new Vector(0, line.Y));
+                if (rect.Width > 0)
+                {
+                    rects.Add(rect);
+                    continue;
+                }
+
+                // Zero-width positions (the continuation characters of a
+                // formula, ADR-0010) report no box of their own; the character
+                // they stand for is painted inside their line, so the reader's
+                // highlight has to cover that line.
+                rects.Add(new Rect(rect.X, line.Y, rect.Width, line.TextLine.Height));
             }
         }
 

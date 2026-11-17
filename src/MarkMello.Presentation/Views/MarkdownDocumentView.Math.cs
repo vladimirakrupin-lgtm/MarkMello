@@ -9,7 +9,13 @@ namespace MarkMello.Presentation.Views;
 
 public sealed partial class MarkdownDocumentView
 {
-    private StackPanel BuildMathBlock(MarkdownMathBlock block)
+    /// <summary>
+    /// Block-level display formula. The formula occupies its whole TeX range in
+    /// the document text map, so the visual is registered as a selection
+    /// fragment: selection, copy and search highlight it as one unit instead of
+    /// letting it fall out of the document flow (ADR-0010).
+    /// </summary>
+    private StackPanel BuildMathBlock(MarkdownMathBlock block, string path)
     {
         var baseFontSize = ReadingPreferences.FontSize;
         var foreground = LookupBrush("MmTextBrush") ?? Brushes.Black;
@@ -29,29 +35,89 @@ public sealed partial class MarkdownDocumentView
             UseLayoutRounding = true
         };
 
+        if (!_textMap.TryGetFragment(path, out var fragment))
+        {
+            // No canonical range to mirror (the block is not part of the text
+            // flow): keep the old non-selectable rendering.
+            host.Children.Add(CreateMathBlockContent(block, layout, baseFontSize, foreground));
+            return host;
+        }
+
+        if (fragment.Text.StartsWith(block.Source, StringComparison.Ordinal))
+        {
+            var content = CreateMathBlockContent(block, layout, baseFontSize, foreground);
+            var selection = new MarkdownMathSelectionFragment(
+                content,
+                Math.Max(1, layout?.Size.Width ?? baseFontSize * 2),
+                Math.Max(1, layout?.Size.Height ?? baseFontSize))
+            {
+                DocumentRange = fragment.Range,
+                HorizontalAlignment = HorizontalAlignment.Center
+            };
+
+            // The formula box is the only visual; it hosts the content for
+            // measurement and carries the fragment itself for hit-testing.
+            selection.ApplyThemeBrushes(
+                LookupBrush("MmSelectionBrush") ?? LookupBrush("MmAccentSoftBrush"),
+                LookupBrush("MmAccentBrush"),
+                LookupBrush("MmFindHighlightBrush"),
+                LookupBrush("MmFindActiveBrush"),
+                LookupBrush("MmAccentBrush"));
+
+            RegisterSelectionFragment(selection, path);
+            selection.SelectionRange = new DocumentTextRange(SelectionStart, SelectionEnd);
+            host.Children.Add(selection);
+            return host;
+        }
+
+        // A longer canonical text (for example a one-line $$...$$ kept inside a
+        // paragraph) cannot be mirrored by the measured box alone: render the
+        // source as selectable text so every canonical character stays mapped.
+        var textFragment = new MarkdownSelectionTextFragment
+        {
+            StyledText = MarkdownStyledText.FromInlines([new MarkdownTextInline(fragment.Text)]),
+            DocumentRange = fragment.Range,
+            BaseFontFamily = new FontFamily("Consolas, Menlo, Monaco, monospace"),
+            BaseFontSize = Math.Max(12, baseFontSize - 2),
+            BaseFontWeight = FontWeight.Normal,
+            BaseFontStyle = FontStyle.Normal,
+            BaseLineHeight = GetBodyLineHeight(),
+            InlineCodeFontFamily = ResolveMonoFontFamily(),
+            LayoutTextWrapping = TextWrapping.Wrap
+        };
+
+        host.HorizontalAlignment = HorizontalAlignment.Stretch;
+        RegisterSelectionFragment(textFragment, path);
+        textFragment.SelectionRange = new DocumentTextRange(SelectionStart, SelectionEnd);
+        host.Children.Add(textFragment);
+        return host;
+    }
+
+    private static Control CreateMathBlockContent(
+        MarkdownMathBlock block,
+        MarkdownMathLayout? layout,
+        double baseFontSize,
+        IBrush foreground)
+    {
         if (layout is { IsValid: true } valid)
         {
-            host.Children.Add(new MarkdownMathBlockVisual(
+            return new MarkdownMathBlockVisual(
                 block.Source,
                 baseFontSize,
                 foreground,
-                valid.Size));
-        }
-        else
-        {
-            // Owner decision: on invalid LaTeX show the source instead of an
-            // error ornament, so the author never loses the formula text.
-            host.Children.Add(new SelectableTextBlock
-            {
-                Text = block.Source,
-                FontFamily = new FontFamily("Consolas, Menlo, Monaco, monospace"),
-                FontSize = Math.Max(12, baseFontSize - 2),
-                TextWrapping = TextWrapping.Wrap,
-                UseLayoutRounding = true
-            });
+                valid.Size);
         }
 
-        return host;
+        // Owner decision: on invalid LaTeX show the source instead of an
+        // error ornament, so the author never loses the formula text.
+        return new SelectableTextBlock
+        {
+            Text = block.Source,
+            FontFamily = new FontFamily("Consolas, Menlo, Monaco, monospace"),
+            FontSize = Math.Max(12, baseFontSize - 2),
+            TextWrapping = TextWrapping.Wrap,
+            UseLayoutRounding = true
+        };
     }
 }
 

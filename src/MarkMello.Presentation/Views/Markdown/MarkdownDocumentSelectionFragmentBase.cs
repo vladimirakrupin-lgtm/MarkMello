@@ -80,6 +80,15 @@ internal abstract class MarkdownDocumentSelectionFragmentBase : Control, IDispos
 
     public abstract DocumentTextRange GetDocumentWordRange(Point localPoint);
 
+    /// <summary>
+    /// The document-text range this fragment paints just past the end of
+    /// <paramref name="localOffset"/> — for example the formula that starts
+    /// right after a caret. The active search match is completed with it so a
+    /// hit that begins at a formula boundary is not left without a highlight.
+    /// Returns an empty range when nothing special follows the offset.
+    /// </summary>
+    public virtual DocumentTextRange GetAdjacentDocumentRange(int localOffset) => DocumentTextRange.Empty;
+
     public abstract bool TryGetLinkAt(Point localPoint, out MarkdownLinkSpan linkSpan);
 
     public abstract void Dispose();

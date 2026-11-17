@@ -98,10 +98,11 @@ internal sealed record MarkdownStyledText(
     }
 
     /// <summary>
-    /// Formulas occupy a single canonical character in the text stream (the
-    /// placeholder glyph is never drawn by the text layer — the math run
-    /// paints the real formula), so selection/copy/search keep a stable,
-    /// contiguous offset model.
+    /// A formula keeps its full TeX in the canonical text stream (ADR-0010),
+    /// exactly as the document text map does, so selection, search and copy
+    /// offsets agree between the two. Only the display layout compresses it
+    /// into a single drawable run; <see cref="MarkdownMathSpan.Range"/> records
+    /// the canonical span the run stands for.
     /// </summary>
     private static void AppendMath(
         MarkdownMathInline mathInline,
@@ -116,7 +117,7 @@ internal sealed record MarkdownStyledText(
         }
 
         var start = builder.Length;
-        builder.Append(MathPlaceholder);
+        builder.Append(mathInline.Content);
         var end = builder.Length;
         math.Add(new MarkdownMathSpan(
             math.Count,
@@ -125,8 +126,6 @@ internal sealed record MarkdownStyledText(
             mathInline.IsDisplay,
             style));
     }
-
-    private const char MathPlaceholder = '\uE002';
 
     private static string GetImageInlinePlainText(MarkdownImageInline image)
     {
@@ -267,7 +266,8 @@ internal readonly record struct MarkdownInlineImageSpan(
 
 /// <summary>
 /// A parsed formula inside a styled text run. The canonical range covers the
-/// single placeholder character; the renderer paints the LaTeX there.
+/// full TeX source (it is part of the text stream, ADR-0010); the renderer
+/// paints the formula in place of that range.
 /// </summary>
 internal readonly record struct MarkdownMathSpan(
     int Index,

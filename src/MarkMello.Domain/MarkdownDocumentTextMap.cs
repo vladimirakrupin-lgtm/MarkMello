@@ -136,6 +136,8 @@ public sealed class MarkdownDocumentTextMap
                 builder.Append(code.Code);
                 break;
             case MarkdownMathInline math:
+                // ADR-0010: the canonical text carries the full TeX, so copy,
+                // search and the text map agree on offsets.
                 builder.Append(math.Content);
                 break;
 
@@ -250,8 +252,9 @@ public sealed class MarkdownDocumentTextMap
                     return;
 
                 case MarkdownMathBlock math:
-                    // Math source participates in copy as plain TeX so the
-                    // formula content is not lost on selection copy.
+                    // ADR-0010: the formula's full TeX is part of the canonical
+                    // text, so a block selection copies it without loss and its
+                    // selection fragment can mirror this range.
                     AppendTextFragment(path, MarkdownDocumentTextFragmentKind.CodeBlock, math.Source);
                     AppendBlockSeparator(doubleBreak: true);
                     return;
