@@ -31,6 +31,10 @@ Thumbs.db
 # Logs
 *.log
 
+# Python release tooling
+__pycache__/
+*.pyc
+
 # Other
 .editorconfig
 .codex-tmp/
