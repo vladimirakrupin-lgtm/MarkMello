@@ -32,8 +32,13 @@ public sealed partial class MarkdigMarkdownDocumentRenderer : IMarkdownDocumentR
             return RenderedMarkdownDocument.Empty;
         }
 
-        var document = MarkdigMarkdown.Parse(markdown, Pipeline);
-        var blocks = ConvertBlocks(document, markdown);
+        // Pandoc-style \(...\) / \[...\] delimiters are invisible to Markdig's
+        // dollar math extension, and its escape pass strips the backslash, so
+        // they are rewritten on a working copy whose line/offset grid matches
+        // the original (ADR-0012).
+        var working = MarkdownLatexMathDelimiters.Prepare(markdown);
+        var document = MarkdigMarkdown.Parse(working, Pipeline);
+        var blocks = ConvertBlocks(document, working);
         return new RenderedMarkdownDocument(blocks);
     }
 }

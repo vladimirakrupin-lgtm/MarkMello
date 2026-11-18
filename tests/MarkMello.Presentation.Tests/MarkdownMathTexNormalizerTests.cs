@@ -89,6 +89,30 @@ public sealed class MarkdownMathTexNormalizerTests
     }
 
     [Fact]
+    public void BoxedFormulaBecomesDoubleRule()
+    {
+        // The engine has no \boxed (nor \fbox): a boxed result must not fall
+        // back to raw source, so the box becomes the supported double rule.
+        var normalized = MarkdownMathTexNormalizer.Normalize(@"\boxed{E_t-E_i\approx0.2}");
+
+        Assert.Equal(@"\overline{\underline{E_t-E_i\approx0.2}}", normalized);
+    }
+
+    [Fact]
+    public Task BoxedFormulaFromSampleRenders()
+        => _fixture.Session.Dispatch(() =>
+        {
+            var layout = MarkdownMathRenderer.Measure(
+                @"\boxed{E_t-E_i\approx+0.11\ldots+0.31\ \text{эВ}}",
+                16,
+                Brushes.Black,
+                isDisplay: true);
+
+            Assert.NotNull(layout);
+            Assert.True(layout!.IsValid, layout.ErrorMessage);
+        }, CancellationToken.None);
+
+    [Fact]
     public void UserReportedSurfFormulaBecomesValidAndSpaced()
     {
         const string latex = @"R_{surf} = \frac{n_s p_s - n_{is}^2}{\frac{n_s + n_{1s}}{S_p} + \frac{p_s + p_{1s}}{S_n}}";
