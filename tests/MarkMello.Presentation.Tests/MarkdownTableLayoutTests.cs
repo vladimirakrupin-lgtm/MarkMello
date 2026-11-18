@@ -275,6 +275,38 @@ public sealed class MarkdownTableLayoutTests
             Assert.Equal(2, lastCells.Count);
         }, CancellationToken.None);
 
+    [Fact]
+    public Task UnchangedTableKeepsWidthsAcrossRebuild()
+        => _fixture.Session.Dispatch(() =>
+        {
+            // T8: неизменённая таблица переиспользуется (MarkdownBlockStructuralComparer)
+            // вместе с применёнными ширинами — повторный rebuild без изменений
+            // не сбрасывает колонки в 1*.
+            var view = CreateView(new RenderedMarkdownDocument(
+            [
+                CreateTable(
+                    HeaderCells(Yes, "Второй заголовок"),
+                    DataRow(Yes, "Длинный текст второй колонки, который переносится")),
+            ]), contentWidth: 800);
+
+            UpdateLayout(view);
+            var before = GetTableGrid(view).ColumnDefinitions
+                .Select(definition => definition.Width).ToList();
+            Assert.All(before, width => Assert.Equal(GridUnitType.Pixel, width.GridUnitType));
+
+            view.Document = new RenderedMarkdownDocument(
+            [
+                CreateTable(
+                    HeaderCells(Yes, "Второй заголовок"),
+                    DataRow(Yes, "Длинный текст второй колонки, который переносится")),
+            ]);
+            UpdateLayout(view);
+
+            var after = GetTableGrid(view).ColumnDefinitions
+                .Select(definition => definition.Width).ToList();
+            Assert.Equal(before, after);
+        }, CancellationToken.None);
+
     private const string Yes = "Да";
 
     private static MarkdownTableBlock CreateTable(
