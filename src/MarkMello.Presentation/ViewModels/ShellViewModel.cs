@@ -221,9 +221,10 @@ public partial class ShellViewModel : ObservableObject
 
     /// <summary>
     /// One discrete zoom step per this many accumulated wheel Delta units.
-    /// Typical mouse notch is ~120; touchpads report fractions.
+    /// Avalonia normalizes wheel Delta to ~+/-1 per mouse notch (touchpads
+    /// report fractions), so one notch equals one step.
     /// </summary>
-    internal const double ReadingZoomWheelThreshold = 50;
+    internal const double ReadingZoomWheelThreshold = 1;
 
     /// <summary>Fractional Ctrl+wheel remainder below <see cref="ReadingZoomWheelThreshold"/>.</summary>
     private double _readingZoomRemainder;
