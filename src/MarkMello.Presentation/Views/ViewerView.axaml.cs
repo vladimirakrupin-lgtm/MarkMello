@@ -137,6 +137,14 @@ public partial class ViewerView : UserControl, IFindHost, IOutlineNavigationHost
             return;
         }
 
+        // Shift+wheel is a horizontal-scroll gesture (Avalonia's inner
+        // ScrollContentPresenter swaps Delta.Y into Delta.X). Never take it
+        // over here — let it reach nested scrollers (tables, code blocks).
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+        {
+            return;
+        }
+
         // Preserve horizontal wheel gestures for nested controls such as
         // horizontally scrollable code blocks. We only take over primarily
         // vertical scrolling to match the faster browser-like reading feel.
