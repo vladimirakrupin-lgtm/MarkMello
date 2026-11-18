@@ -77,6 +77,7 @@ public partial class MainWindow : Window
         AddHandler(DragDrop.DropEvent, OnDrop);
         AddHandler(PointerPressedEvent, OnWindowPointerPressed, RoutingStrategies.Tunnel);
         AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Tunnel);
+        AddHandler(InputElement.PointerWheelChangedEvent, OnWindowPointerWheel, RoutingStrategies.Tunnel);
         AttachWindowsCaptionPressHook();
 
         Opened += OnWindowOpened;
@@ -415,6 +416,29 @@ public partial class MainWindow : Window
         _viewModel.ToggleSettingsCommand.Execute(null);
         e.Handled = true;
     }
+
+    /// <summary>
+    /// Ctrl+wheel document zoom (browser-like): route to the reading font size
+    /// before any nested scroller sees the gesture. Same setting as the Size
+    /// slider, so the slider, persistence and full document rebuild follow.
+    /// Works in reading mode and in the edit-mode preview — DataContext stays
+    /// the ShellViewModel in both; the editor TextBox needs no special case.
+    /// </summary>
+    private void OnWindowPointerWheel(object? sender, PointerWheelEventArgs e)
+    {
+        if (!HasZoomModifier(e.KeyModifiers) || e.Handled || _viewModel is null)
+        {
+            return;
+        }
+
+        if (_viewModel.ApplyReadingZoom(e.Delta.Y))
+        {
+            e.Handled = true;
+        }
+    }
+
+    private static bool HasZoomModifier(KeyModifiers modifiers)
+        => modifiers.HasFlag(KeyModifiers.Control) || modifiers.HasFlag(KeyModifiers.Meta);
 
     // ---------- Drag & drop ----------
 

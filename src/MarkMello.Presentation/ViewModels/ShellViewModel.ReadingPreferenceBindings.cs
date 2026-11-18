@@ -33,6 +33,42 @@ public partial class ShellViewModel
         }
     }
 
+    /// <summary>
+    /// Ctrl+wheel document zoom (browser-like): steps the base font size through
+    /// the same setting as the Size slider (<see cref="FontSizeSetting"/>), so the
+    /// slider, persistence and document rebuild follow automatically.
+    /// Fractional touchpad deltas accumulate until one full notch is reached;
+    /// a single gesture never steps more than once. Returns true when applied.
+    /// </summary>
+    public bool ApplyReadingZoom(double deltaY)
+    {
+        if (!double.IsFinite(deltaY) || Math.Abs(deltaY) <= double.Epsilon)
+        {
+            return false;
+        }
+
+        _readingZoomRemainder += deltaY;
+        if (Math.Abs(_readingZoomRemainder) < ReadingZoomWheelThreshold)
+        {
+            return false;
+        }
+
+        var step = Math.Sign(_readingZoomRemainder);
+        _readingZoomRemainder = 0;
+
+        var target = Math.Clamp(
+            ReadingPreferences.FontSize + step,
+            ReadingPreferences.MinFontSize,
+            ReadingPreferences.MaxFontSize);
+        if (target == ReadingPreferences.FontSize)
+        {
+            return false;
+        }
+
+        ApplyReadingPreferences(ReadingPreferences with { FontSize = target });
+        return true;
+    }
+
     public double LineHeightSetting
     {
         get => ReadingPreferences.LineHeight;

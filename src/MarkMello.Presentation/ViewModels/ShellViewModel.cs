@@ -219,6 +219,15 @@ public partial class ShellViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsDirty))]
     private EditorSessionViewModel? _editorSession;
 
+    /// <summary>
+    /// One discrete zoom step per this many accumulated wheel Delta units.
+    /// Typical mouse notch is ~120; touchpads report fractions.
+    /// </summary>
+    internal const double ReadingZoomWheelThreshold = 50;
+
+    /// <summary>Fractional Ctrl+wheel remainder below <see cref="ReadingZoomWheelThreshold"/>.</summary>
+    private double _readingZoomRemainder;
+
     [ObservableProperty]
     private bool _isDirtyPromptOpen;
 
