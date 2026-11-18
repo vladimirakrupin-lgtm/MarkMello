@@ -219,6 +219,16 @@ public partial class ShellViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsDirty))]
     private EditorSessionViewModel? _editorSession;
 
+    /// <summary>
+    /// One discrete zoom step per this many accumulated wheel Delta units.
+    /// Avalonia normalizes wheel Delta to ~+/-1 per mouse notch (touchpads
+    /// report fractions), so one notch equals one step.
+    /// </summary>
+    internal const double ReadingZoomWheelThreshold = 1;
+
+    /// <summary>Fractional Ctrl+wheel remainder below <see cref="ReadingZoomWheelThreshold"/>.</summary>
+    private double _readingZoomRemainder;
+
     [ObservableProperty]
     private bool _isDirtyPromptOpen;
 
@@ -904,7 +914,6 @@ public partial class ShellViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowsReadEyeIcon));
         OnPropertyChanged(nameof(ShowsReadingStatus));
         OnPropertyChanged(nameof(ShowsAppMenuControl));
-        OnPropertyChanged(nameof(ShowsFloatingAppMenuButton));
         OnPropertyChanged(nameof(IsAppMenuOpen));
         OnPropertyChanged(nameof(IsAppSettingsOpen));
         OnPropertyChanged(nameof(IsAppAboutOpen));
@@ -1439,6 +1448,7 @@ public partial class ShellViewModel : ObservableObject
     private void RefreshDocumentSummary()
     {
         OnPropertyChanged(nameof(FileName));
+        OnPropertyChanged(nameof(IsCurrentDocumentSaved));
         OnPropertyChanged(nameof(TitleFileDisplayName));
         OnPropertyChanged(nameof(HasDocumentTitle));
         OnPropertyChanged(nameof(WordCount));

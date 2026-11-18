@@ -2,6 +2,12 @@ using MarkMello.Domain;
 
 namespace MarkMello.Presentation.Views.Markdown;
 
+/// <summary>
+/// Maps canonical text offsets (the document text map / styled text, ADR-0010)
+/// to the display positions the text formatter lays out. Text, code padding and
+/// formulas stay 1:1; images collapse their placeholder text and formulas keep
+/// their full TeX but paint once, so those ranges map onto one display box.
+/// </summary>
 internal sealed class MarkdownDisplayLayoutModel
 {
     private const char LeftCodePaddingMarker = '\uE000';
@@ -102,8 +108,10 @@ internal sealed class MarkdownDisplayLayoutModel
             var text = _styledText.Text;
             var spans = _styledText.Spans;
             var images = _styledText.Images;
+            var math = _styledText.Math;
             var spanIndex = 0;
             var imageIndex = 0;
+            var mathIndex = 0;
             var index = 0;
 
             while (index < text.Length)
@@ -118,11 +126,24 @@ internal sealed class MarkdownDisplayLayoutModel
                     imageIndex++;
                 }
 
+                while (mathIndex < math.Count && math[mathIndex].Range.End <= index)
+                {
+                    mathIndex++;
+                }
+
                 if (imageIndex < images.Count && images[imageIndex].Range.Start == index)
                 {
                     var image = images[imageIndex];
                     AppendImageSegment(image);
                     index = image.Range.End;
+                    continue;
+                }
+
+                if (mathIndex < math.Count && math[mathIndex].Range.Start == index)
+                {
+                    var formula = math[mathIndex];
+                    AppendMathSegment(formula);
+                    index = formula.Range.End;
                     continue;
                 }
 
@@ -145,6 +166,11 @@ internal sealed class MarkdownDisplayLayoutModel
                 else
                 {
                     style = MarkdownInlineStyleState.Default;
+                }
+
+                if (mathIndex < math.Count && math[mathIndex].Range.Start > index)
+                {
+                    end = Math.Min(end, math[mathIndex].Range.Start);
                 }
 
                 if (imageIndex < images.Count && images[imageIndex].Range.Start > index)
@@ -241,6 +267,47 @@ internal sealed class MarkdownDisplayLayoutModel
             _displayCaretToCanonicalCaret.Add(_canonicalOffset);
         }
 
+        private void AppendMathSegment(MarkdownMathSpan math)
+        {
+            // One drawable run substitutes the whole canonical TeX range: the
+            // first display position draws the formula, the remaining ones are
+            // zero-width continuations so caret/selection maps stay 1:1.
+            // NOTE: DisplayLength must be 1 (not canonicalLength) — otherwise
+            // the Math segment overlaps the continuation segments and
+            // FindSegmentIndex keeps returning the Math run for every TeX
+            // character, painting the formula N times and exploding line
+            // width/height (s1.md duplication + huge gaps).
+            var canonicalLength = math.Range.Length;
+            _segments.Add(new MarkdownDisplaySegment(
+                MarkdownDisplaySegmentKind.Math,
+                _displayOffset,
+                1,
+                math.Range,
+                math.Latex,
+                math.Style,
+                MathIndex: math.Index));
+
+            _displayOffset++;
+            _canonicalOffset = math.Range.Start + 1;
+            _displayCaretToCanonicalCaret.Add(_canonicalOffset);
+
+            for (var index = 1; index < canonicalLength; index++)
+            {
+                _segments.Add(new MarkdownDisplaySegment(
+                    MarkdownDisplaySegmentKind.MathContinuation,
+                    _displayOffset,
+                    1,
+                    new DocumentTextRange(math.Range.Start + index, math.Range.Start + index + 1),
+                    string.Empty,
+                    math.Style,
+                    MathIndex: math.Index));
+
+                _displayOffset++;
+                _canonicalOffset = math.Range.Start + index + 1;
+                _displayCaretToCanonicalCaret.Add(_canonicalOffset);
+            }
+        }
+
         private void AppendTextSegments(string text, MarkdownInlineStyleState style)
         {
             if (string.IsNullOrEmpty(text))
@@ -315,16 +382,26 @@ internal sealed class MarkdownDisplayLayoutModel
         {
             foreach (var segment in _segments)
             {
-                if (segment.Kind != MarkdownDisplaySegmentKind.Image || segment.CanonicalRange.IsEmpty)
+                if (segment.Kind is not (MarkdownDisplaySegmentKind.Image or MarkdownDisplaySegmentKind.Math)
+                    || segment.CanonicalRange.IsEmpty)
                 {
                     continue;
                 }
 
-                for (var caret = segment.CanonicalRange.Start; caret <= segment.CanonicalRange.End; caret++)
+                // Image placeholders and formulas are drawn as one box that
+                // stands for several canonical characters (a whole TeX range
+                // for math, ADR-0010). Every caret inside that range maps onto
+                // the box, so highlights and selection cover what is painted.
+                for (var caret = segment.CanonicalRange.Start; caret < segment.CanonicalRange.End; caret++)
                 {
                     canonicalCaretToDisplayStart[caret] = segment.DisplayStart;
                     canonicalCaretToDisplayEnd[caret] = segment.DisplayEnd;
                 }
+
+                // A range that ends with the box (or with the text right before
+                // it) must still reach the box: the caret that ends the box is
+                // pinned to its display end.
+                canonicalCaretToDisplayEnd[segment.CanonicalRange.End] = segment.DisplayEnd;
             }
         }
     }
@@ -345,7 +422,8 @@ internal readonly record struct MarkdownDisplaySegment(
     DocumentTextRange CanonicalRange,
     string Text,
     MarkdownInlineStyleState Style,
-    int ImageIndex = -1)
+    int ImageIndex = -1,
+    int MathIndex = -1)
 {
     public int DisplayEnd => DisplayStart + DisplayLength;
 }
@@ -355,6 +433,14 @@ internal enum MarkdownDisplaySegmentKind
     Text,
     LineBreak,
     Image,
+    Math,
     CodePaddingLeft,
-    CodePaddingRight
+    CodePaddingRight,
+
+    /// <summary>
+    /// Zero-width position inside a formula's canonical range. The first
+    /// position of a formula is <see cref="Math"/> and paints the formula;
+    /// every following TeX character is a continuation, drawn by that run.
+    /// </summary>
+    MathContinuation
 }

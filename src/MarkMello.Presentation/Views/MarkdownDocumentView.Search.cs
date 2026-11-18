@@ -136,7 +136,7 @@ public sealed partial class MarkdownDocumentView
     {
         foreach (var fragment in _selectionFragments)
         {
-            fragment.SearchHighlightRanges = CollectMatchesWithin(fragment.DocumentRange);
+            fragment.SearchHighlightRanges = CollectMatchesWithin(fragment);
         }
 
         ApplyActiveSearchHighlightToFragments();
@@ -161,13 +161,40 @@ public sealed partial class MarkdownDocumentView
                 continue;
             }
 
-            var intersection = fragment.DocumentRange.Intersection(active);
-            fragment.ActiveSearchHighlight = intersection.IsEmpty ? null : intersection;
+            fragment.ActiveSearchHighlight = ResolveHighlightRange(fragment, active);
         }
     }
 
-    private IReadOnlyList<DocumentTextRange> CollectMatchesWithin(DocumentTextRange fragmentRange)
+    /// <summary>
+    /// Пересечение совпадения с фрагментом, дополненное особым диапазоном,
+    /// который фрагмент рисует сразу за своим текстом. Формула занимает в
+    /// каноническом тексте весь свой TeX, а на экране — один бокс, поэтому
+    /// совпадение, начинающееся точно на формуле, не пересекает ни её символы,
+    /// ни соседний текст, а визуально задевает нарисованную формулу. Пустое
+    /// пересечение с таким диапазоном считается подсветкой формулы целиком.
+    /// </summary>
+    private static DocumentTextRange? ResolveHighlightRange(
+        MarkdownDocumentSelectionFragmentBase fragment,
+        DocumentTextRange match)
     {
+        var intersection = fragment.DocumentRange.Intersection(match);
+        if (!intersection.IsEmpty)
+        {
+            return intersection;
+        }
+
+        var adjacent = fragment.GetAdjacentDocumentRange(fragment.DocumentRange.End - fragment.DocumentRange.Start);
+        if (adjacent.IsEmpty)
+        {
+            return null;
+        }
+
+        return adjacent.Intersects(match) ? adjacent : null;
+    }
+
+    private IReadOnlyList<DocumentTextRange> CollectMatchesWithin(MarkdownDocumentSelectionFragmentBase fragment)
+    {
+        var fragmentRange = fragment.DocumentRange;
         List<DocumentTextRange>? ranges = null;
 
         for (var index = FindFirstMatchReaching(fragmentRange.Start); index < _searchMatches.Count; index++)
@@ -178,13 +205,29 @@ public sealed partial class MarkdownDocumentView
                 break;
             }
 
-            var intersection = fragmentRange.Intersection(match);
-            if (!intersection.IsEmpty)
+            // В выделении фрагмент рисует только пересечение со своим текстом;
+            // совпадение на формуле сразу за его концом рисуется всей формулой.
+            var highlight = ResolveHighlightRange(fragment, match);
+            if (highlight is not { } range)
             {
-                // Большинство фрагментов не содержит ни одного совпадения —
-                // список заводим только когда есть что в него положить.
-                ranges ??= [];
-                ranges.Add(intersection);
+                continue;
+            }
+
+            if (ranges is not null && ranges.Contains(range))
+            {
+                continue;
+            }
+
+            // Большинство фрагментов не содержит ни одного совпадения —
+            // список заводим только когда есть что в него положить.
+            ranges ??= [];
+            ranges.Add(range);
+
+            if (range == fragmentRange)
+            {
+                // Целая формула в конце фрагмента покрывает и совпадения, которые
+                // начинаются внутри неё, — дальше по этому фрагменту не идём.
+                break;
             }
         }
 
@@ -225,7 +268,7 @@ public sealed partial class MarkdownDocumentView
         }
 
         var match = _searchMatches[_activeMatchIndex];
-        var fragment = FindFragmentForDocumentOffset(match.Start);
+        var fragment = FindFragmentForMatch(match);
         if (fragment is null)
         {
             return;
@@ -239,7 +282,9 @@ public sealed partial class MarkdownDocumentView
 
         var yInFragment = 0.0;
         if (fragment is MarkdownSelectionTextFragment textFragment
-            && textFragment.TryGetLineTopForLocalOffset(match.Start - fragment.DocumentRange.Start, out var lineY))
+            && textFragment.TryGetLineTopForLocalOffset(
+                Math.Clamp(match.Start - fragment.DocumentRange.Start, 0, textFragment.StyledText.Text.Length - 1),
+                out var lineY))
         {
             yInFragment = lineY;
         }
@@ -264,6 +309,30 @@ public sealed partial class MarkdownDocumentView
         foreach (var fragment in _selectionFragments)
         {
             if (offset >= fragment.DocumentRange.Start && offset < fragment.DocumentRange.End)
+            {
+                return fragment;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Фрагмент, на котором лежит совпадение: сначала тот, что содержит его
+    /// начало, иначе — фрагмент, чей визуальный блок совпадает с совпадением
+    /// (формула в конце фрагмента; см. <see cref="ResolveHighlightRange"/>).
+    /// </summary>
+    private MarkdownDocumentSelectionFragmentBase? FindFragmentForMatch(DocumentTextRange match)
+    {
+        if (FindFragmentForDocumentOffset(match.Start) is { } containing)
+        {
+            return containing;
+        }
+
+        foreach (var fragment in _selectionFragments)
+        {
+            var adjacent = fragment.GetAdjacentDocumentRange(fragment.DocumentRange.End - fragment.DocumentRange.Start);
+            if (adjacent.Intersects(match))
             {
                 return fragment;
             }

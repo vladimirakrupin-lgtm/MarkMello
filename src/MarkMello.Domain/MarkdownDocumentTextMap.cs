@@ -85,6 +85,7 @@ public sealed class MarkdownDocumentTextMap
             MarkdownImageBlock => string.Empty,
             MarkdownDiagramBlock => string.Empty,
             MarkdownCodeBlock code => code.Code,
+            MarkdownMathBlock math => math.Source,
             MarkdownTableBlock table => ExtractPlainText(table),
             _ => block.ToString() ?? string.Empty
         };
@@ -133,6 +134,11 @@ public sealed class MarkdownDocumentTextMap
 
             case MarkdownCodeInline code:
                 builder.Append(code.Code);
+                break;
+            case MarkdownMathInline math:
+                // ADR-0010: the canonical text carries the full TeX, so copy,
+                // search and the text map agree on offsets.
+                builder.Append(math.Content);
                 break;
 
             case MarkdownImageInline image:
@@ -242,6 +248,14 @@ public sealed class MarkdownDocumentTextMap
 
                 case MarkdownCodeBlock code:
                     AppendTextFragment(path, MarkdownDocumentTextFragmentKind.CodeBlock, code.Code);
+                    AppendBlockSeparator(doubleBreak: true);
+                    return;
+
+                case MarkdownMathBlock math:
+                    // ADR-0010: the formula's full TeX is part of the canonical
+                    // text, so a block selection copies it without loss and its
+                    // selection fragment can mirror this range.
+                    AppendTextFragment(path, MarkdownDocumentTextFragmentKind.CodeBlock, math.Source);
                     AppendBlockSeparator(doubleBreak: true);
                     return;
 

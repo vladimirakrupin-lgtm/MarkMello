@@ -3,6 +3,7 @@ bin/
 obj/
 out/
 publish/
+dist-exe/
 artifacts/
 packaging/windows/dist/
 packaging/macos/dist/
@@ -30,11 +31,16 @@ Thumbs.db
 # Logs
 *.log
 
+# Python release tooling
+__pycache__/
+*.pyc
+
 # Other
 .editorconfig
 .codex-tmp/
 .claude/
 *.zip
 .tmp*
+tools/math-visual/out/
 
 # docs/ версионируется: ADR и планы — это решения проекта, а не локальные заметки

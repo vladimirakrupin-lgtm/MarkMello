@@ -975,6 +975,34 @@
     <Setter Property="BorderThickness" Value="0" />
   </Style>
 
+  <!--
+    ADR-0011 §3: классы ступеней деградации горизонтального паддинга
+    (решение владельца §5.3). Активная ступень переключается классами
+    на Border ячеек из MarkdownDocumentView.Tables.Pipeline.cs; базовый
+    Padding="14,10" остаётся выше, ступени переопределяют только
+    горизонтальный паддинг (вертикальный не трогается).
+    Числа дублируют MarkdownTableLayoutConstants.HorizontalPaddingLadder,
+    который использует их только для расчёта ширин.
+  -->
+  <Style Selector="Border.mm-md-table-header-cell.d1">
+    <Setter Property="Padding" Value="8,10" />
+  </Style>
+  <Style Selector="Border.mm-md-table-cell.d1">
+    <Setter Property="Padding" Value="8,10" />
+  </Style>
+  <Style Selector="Border.mm-md-table-header-cell.d2">
+    <Setter Property="Padding" Value="4,10" />
+  </Style>
+  <Style Selector="Border.mm-md-table-cell.d2">
+    <Setter Property="Padding" Value="4,10" />
+  </Style>
+  <Style Selector="Border.mm-md-table-header-cell.d3">
+    <Setter Property="Padding" Value="4,10" />
+  </Style>
+  <Style Selector="Border.mm-md-table-cell.d3">
+    <Setter Property="Padding" Value="4,10" />
+  </Style>
+
   <Style Selector="TextBlock.mm-md-table-header">
     <Setter Property="UseLayoutRounding" Value="True" />
     <Setter Property="Foreground" Value="{DynamicResource MmTextBrush}" />

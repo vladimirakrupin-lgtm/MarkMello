@@ -21,7 +21,7 @@ public partial class MainWindow : Window
 {
     private const double DefaultWindowWidth = 1280;
     private const double DefaultWindowHeight = 840;
-    private const double TitleBarLeadingInset = 14;
+    private const double TitleBarLeadingInset = 16;
     private const double MacOsTitleBarLeadingInset = 82;
     private const int WindowPlacementMarginPixels = 8;
 
@@ -77,6 +77,7 @@ public partial class MainWindow : Window
         AddHandler(DragDrop.DropEvent, OnDrop);
         AddHandler(PointerPressedEvent, OnWindowPointerPressed, RoutingStrategies.Tunnel);
         AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Tunnel);
+        AddHandler(InputElement.PointerWheelChangedEvent, OnWindowPointerWheel, RoutingStrategies.Tunnel);
         AttachWindowsCaptionPressHook();
 
         Opened += OnWindowOpened;
@@ -124,7 +125,7 @@ public partial class MainWindow : Window
     internal static Thickness CalculateTitleBarContentMargin(bool isMacOS)
         => isMacOS
             ? new Thickness(MacOsTitleBarLeadingInset, 0, TitleBarLeadingInset, 0)
-            : new Thickness(TitleBarLeadingInset, 0, 0, 0);
+            : new Thickness(TitleBarLeadingInset, 0);
 
     private async Task InitializeStartupAsync()
     {
@@ -415,6 +416,29 @@ public partial class MainWindow : Window
         _viewModel.ToggleSettingsCommand.Execute(null);
         e.Handled = true;
     }
+
+    /// <summary>
+    /// Ctrl+wheel document zoom (browser-like): route to the reading font size
+    /// before any nested scroller sees the gesture. Same setting as the Size
+    /// slider, so the slider, persistence and full document rebuild follow.
+    /// Works in reading mode and in the edit-mode preview — DataContext stays
+    /// the ShellViewModel in both; the editor TextBox needs no special case.
+    /// </summary>
+    private void OnWindowPointerWheel(object? sender, PointerWheelEventArgs e)
+    {
+        if (!HasZoomModifier(e.KeyModifiers) || e.Handled || _viewModel is null)
+        {
+            return;
+        }
+
+        if (_viewModel.ApplyReadingZoom(e.Delta.Y))
+        {
+            e.Handled = true;
+        }
+    }
+
+    private static bool HasZoomModifier(KeyModifiers modifiers)
+        => modifiers.HasFlag(KeyModifiers.Control) || modifiers.HasFlag(KeyModifiers.Meta);
 
     // ---------- Drag & drop ----------
 
