@@ -12,6 +12,8 @@ namespace MarkMello.Presentation.Views.Markdown;
 /// <c>\rvert</c>, ...) — see <see cref="MarkdownMathCommandAliasExpander"/>.</item>
 /// <item>Binary <c>+</c> / <c>−</c> next to a fraction — see
 /// <see cref="MarkdownMathBinarySpacingExpander"/>.</item>
+/// <item>A box around a result (<c>\boxed</c>) — see
+/// <see cref="MarkdownMathBoxedExpander"/>.</item>
 /// </list>
 ///
 /// The normalizer is purely textual and deterministic, so its result can be
@@ -28,6 +30,7 @@ internal static class MarkdownMathTexNormalizer
 
         var expanded = MarkdownMathSizedFractionExpander.Expand(latex);
         var aliased = MarkdownMathCommandAliasExpander.Expand(expanded);
-        return MarkdownMathBinarySpacingExpander.Expand(aliased);
+        var boxed = MarkdownMathBoxedExpander.Expand(aliased);
+        return MarkdownMathBinarySpacingExpander.Expand(boxed);
     }
 }

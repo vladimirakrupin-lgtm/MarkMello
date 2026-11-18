@@ -137,8 +137,11 @@ public sealed class MarkdownDocumentTextMap
                 break;
             case MarkdownMathInline math:
                 // ADR-0010: the canonical text carries the full TeX, so copy,
-                // search and the text map agree on offsets.
-                builder.Append(math.Content);
+                // search and the text map agree on offsets. ADR-0012: the
+                // Pandoc \(...\) delimiters are kept around the TeX, so a
+                // copied formula carries its original markup ($...$ and
+                // \(...\) forms both round-trip).
+                builder.Append(@"\(").Append(math.Content).Append(@"\)");
                 break;
 
             case MarkdownImageInline image:
@@ -254,8 +257,13 @@ public sealed class MarkdownDocumentTextMap
                 case MarkdownMathBlock math:
                     // ADR-0010: the formula's full TeX is part of the canonical
                     // text, so a block selection copies it without loss and its
-                    // selection fragment can mirror this range.
-                    AppendTextFragment(path, MarkdownDocumentTextFragmentKind.CodeBlock, math.Source);
+                    // selection fragment can mirror this range. ADR-0012 keeps
+                    // the Pandoc display delimiters around it, so the copied
+                    // text is valid input again.
+                    AppendTextFragment(
+                        path,
+                        MarkdownDocumentTextFragmentKind.CodeBlock,
+                        "\\[\n" + math.Source + "\n\\]");
                     AppendBlockSeparator(doubleBreak: true);
                     return;
 
