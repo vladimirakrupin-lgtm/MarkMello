@@ -20,7 +20,10 @@ public sealed class MarkdownMathSelectionTests
     private const string ParagraphBefore = "A ";
     private const string Formula = "x^2";
     private const string ParagraphAfter = " B";
-    private const string InlineText = ParagraphBefore + Formula + ParagraphAfter;
+
+    // ADR-0012: the canonical text keeps the Pandoc delimiters around the TeX.
+    private const string InlineFormula = @"\(" + Formula + @"\)";
+    private const string InlineText = ParagraphBefore + InlineFormula + ParagraphAfter;
 
     private readonly AvaloniaHeadlessFixture _fixture;
 
@@ -38,9 +41,9 @@ public sealed class MarkdownMathSelectionTests
             Assert.Equal(paragraph.DocumentRange.Length, paragraph.StyledText.Text.Length);
             Assert.Equal(0, paragraph.DocumentRange.Start);
 
-            var formulaStart = InlineText.IndexOf(Formula, StringComparison.Ordinal);
+            var formulaStart = InlineText.IndexOf(InlineFormula, StringComparison.Ordinal);
             var layout = GetTextLayout(paragraph);
-            var formulaRects = layout.GetSelectionRects(new DocumentTextRange(formulaStart, formulaStart + Formula.Length));
+            var formulaRects = layout.GetSelectionRects(new DocumentTextRange(formulaStart, formulaStart + InlineFormula.Length));
             Assert.NotEmpty(formulaRects);
             var formulaRect = formulaRects[0];
             Assert.True(formulaRect.Width > 1, "formula must paint wider than a 1px caret box");
@@ -55,7 +58,7 @@ public sealed class MarkdownMathSelectionTests
             // A point clearly inside the trailing text (center of the space
             // after the formula) is not on the formula, so clicks there must
             // not snap to the formula start.
-            var afterFormula = layout.GetSelectionRects(new DocumentTextRange(formulaStart + Formula.Length, formulaStart + Formula.Length + 1));
+            var afterFormula = layout.GetSelectionRects(new DocumentTextRange(formulaStart + InlineFormula.Length, formulaStart + InlineFormula.Length + 1));
             Assert.NotEmpty(afterFormula);
             var afterRect = afterFormula[0];
             var trailingPoint = new Point(afterRect.X + afterRect.Width / 2, afterRect.Y + 1);
@@ -65,15 +68,15 @@ public sealed class MarkdownMathSelectionTests
         }, CancellationToken.None);
 
     [Fact]
-    public Task SelectingOnlyInlineFormulaCopiesItsTex()
+    public Task SelectingOnlyInlineFormulaCopiesItsCanonicalText()
         => _fixture.Session.Dispatch(() =>
         {
             var (view, _) = CreateAttachedView(InlineDocument());
-            var start = InlineText.IndexOf(Formula, StringComparison.Ordinal);
+            var start = InlineText.IndexOf(InlineFormula, StringComparison.Ordinal);
 
-            view.SelectRange(new DocumentTextRange(start, start + Formula.Length));
+            view.SelectRange(new DocumentTextRange(start, start + InlineFormula.Length));
 
-            Assert.Equal(Formula, view.SelectedText);
+            Assert.Equal(InlineFormula, view.SelectedText);
         }, CancellationToken.None);
 
     [Fact]
@@ -82,11 +85,11 @@ public sealed class MarkdownMathSelectionTests
         {
             var (view, _) = CreateAttachedView(InlineDocument());
             var start = ParagraphBefore.Length;
-            var end = start + Formula.Length + ParagraphAfter.Length;
+            var end = start + InlineFormula.Length + ParagraphAfter.Length;
 
             view.SelectRange(new DocumentTextRange(start, end));
 
-            Assert.Equal(Formula + ParagraphAfter, view.SelectedText);
+            Assert.Equal(InlineFormula + ParagraphAfter, view.SelectedText);
         }, CancellationToken.None);
 
     [Fact]
@@ -95,13 +98,15 @@ public sealed class MarkdownMathSelectionTests
         {
             var (view, _) = CreateAttachedView(InlineDocument());
             var paragraph = GetParagraph(view);
-            var formulaStart = InlineText.IndexOf(Formula, StringComparison.Ordinal);
+            var formulaStart = InlineText.IndexOf(InlineFormula, StringComparison.Ordinal);
 
             view.ApplySearchQuery(Formula);
 
             Assert.Equal(1, view.MatchCount);
             var highlight = Assert.Single(paragraph.SearchHighlightRanges);
-            Assert.Equal(new DocumentTextRange(formulaStart, formulaStart + Formula.Length), highlight);
+            // The match is the TeX substring; the delimiters stay outside it.
+            var texStart = formulaStart + 2;
+            Assert.Equal(new DocumentTextRange(texStart, texStart + Formula.Length), highlight);
             Assert.Equal(highlight, paragraph.ActiveSearchHighlight);
 
             var layout = GetTextLayout(paragraph);
@@ -126,12 +131,13 @@ public sealed class MarkdownMathSelectionTests
             Assert.Equal(1, view.MatchCount);
             var highlight = Assert.Single(paragraph.SearchHighlightRanges);
             var formulaStart = paragraph.DocumentRange.Start + ParagraphBefore.Length;
-            Assert.Equal(new DocumentTextRange(formulaStart, formulaStart + Formula.Length), highlight);
+            var texStart = formulaStart + 2;
+            Assert.Equal(new DocumentTextRange(texStart, texStart + Formula.Length), highlight);
             Assert.Equal(highlight, paragraph.ActiveSearchHighlight);
 
             var layout = GetTextLayout(paragraph);
             var rects = layout.GetSelectionRects(
-                new DocumentTextRange(ParagraphBefore.Length, ParagraphBefore.Length + Formula.Length));
+                new DocumentTextRange(highlight.Start - paragraph.DocumentRange.Start, highlight.End - paragraph.DocumentRange.Start));
             Assert.Contains(rects, rect => rect.Width > 0);
             Assert.All(rects, rect => Assert.True(rect.Height > 0, "search highlight must have a height"));
         }, CancellationToken.None);
@@ -148,7 +154,7 @@ public sealed class MarkdownMathSelectionTests
             var fragment = view.GetVisualDescendants().OfType<MarkdownMathSelectionFragment>().Single();
             var mapText = MarkdownDocumentTextMap.Create(view.Document!).Text;
 
-            Assert.Equal(BlockFormula, mapText[fragment.DocumentRange.Start..fragment.DocumentRange.End]);
+            Assert.Equal(BlockCanonical, mapText[fragment.DocumentRange.Start..fragment.DocumentRange.End]);
             Assert.True(fragment.Bounds.Width > 0);
             Assert.True(fragment.Bounds.Height > 0);
 
@@ -170,7 +176,7 @@ public sealed class MarkdownMathSelectionTests
             var fragment = view.GetVisualDescendants().OfType<MarkdownMathSelectionFragment>().Single();
             view.SelectRange(fragment.DocumentRange);
 
-            Assert.Equal(BlockFormula, view.SelectedText);
+            Assert.Equal(BlockCanonical, view.SelectedText);
         }, CancellationToken.None);
 
     [Fact]
@@ -238,6 +244,7 @@ public sealed class MarkdownMathSelectionTests
     }
 
     private const string BlockFormula = @"R = \frac{a}{b}";
+    private const string BlockCanonical = "\\[\n" + BlockFormula + "\n\\]";
 
     private static RenderedMarkdownDocument InlineDocument()
         => new(

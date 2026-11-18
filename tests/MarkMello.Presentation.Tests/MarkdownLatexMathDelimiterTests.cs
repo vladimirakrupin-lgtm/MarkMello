@@ -144,13 +144,15 @@ public sealed class MarkdownLatexMathDelimiterTests
     }
 
     [Fact]
-    public void TextMapKeepsTexWithoutDelimiters()
+    public void TextMapKeepsTexWithPandocDelimiters()
     {
-        var document = Render(@"Значение \(x^2\) здесь.");
+        // ADR-0012: the canonical text keeps \(...\) around the TeX next to the
+        // $...$ form, so copied text carries its markup.
+        var document = Render(@"Значение \(x^2\) и $y$ здесь.");
 
         var text = MarkdownDocumentTextMap.Create(document).Text;
 
-        Assert.Contains("x^2", text, StringComparison.Ordinal);
-        Assert.DoesNotContain(@"\(", text, StringComparison.Ordinal);
+        Assert.Contains(@"\(x^2\)", text, StringComparison.Ordinal);
+        Assert.Contains(@"\(y\)", text, StringComparison.Ordinal);
     }
 }

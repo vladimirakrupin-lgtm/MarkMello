@@ -100,9 +100,11 @@ internal sealed record MarkdownStyledText(
     /// <summary>
     /// A formula keeps its full TeX in the canonical text stream (ADR-0010),
     /// exactly as the document text map does, so selection, search and copy
-    /// offsets agree between the two. Only the display layout compresses it
-    /// into a single drawable run; <see cref="MarkdownMathSpan.Range"/> records
-    /// the canonical span the run stands for.
+    /// offsets agree between the two. ADR-0012 keeps the Pandoc delimiters
+    /// around the TeX here as well, so both maps share one canonical form.
+    /// Only the display layout compresses it into a single drawable run;
+    /// <see cref="MarkdownMathSpan.Range"/> records the canonical span the run
+    /// stands for.
     /// </summary>
     private static void AppendMath(
         MarkdownMathInline mathInline,
@@ -117,7 +119,7 @@ internal sealed record MarkdownStyledText(
         }
 
         var start = builder.Length;
-        builder.Append(mathInline.Content);
+        builder.Append(@"\(").Append(mathInline.Content).Append(@"\)");
         var end = builder.Length;
         math.Add(new MarkdownMathSpan(
             math.Count,

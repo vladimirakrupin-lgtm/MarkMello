@@ -43,7 +43,9 @@ public sealed partial class MarkdownDocumentView
             return host;
         }
 
-        if (fragment.Text.StartsWith(block.Source, StringComparison.Ordinal))
+        // The block fragment carries the Pandoc display delimiters around the
+        // TeX (ADR-0012); the measured box mirrors exactly that canonical text.
+        if (string.Equals(fragment.Text, "\\[\n" + block.Source + "\n\\]", StringComparison.Ordinal))
         {
             var content = CreateMathBlockContent(block, layout, baseFontSize, foreground);
             var selection = new MarkdownMathSelectionFragment(

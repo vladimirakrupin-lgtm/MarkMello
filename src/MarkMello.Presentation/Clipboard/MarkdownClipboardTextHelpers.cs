@@ -58,7 +58,7 @@ internal static class MarkdownClipboardTextHelpers
             MarkdownStrongInline strong => GetPlainTextLength(strong.Inlines),
             MarkdownEmphasisInline emphasis => GetPlainTextLength(emphasis.Inlines),
             MarkdownCodeInline code => code.Code.Length,
-            MarkdownMathInline math => math.Content.Length,
+            MarkdownMathInline math => MathInlineTextLength(math),
             MarkdownImageInline image => GetImageInlinePlainText(image).Length,
             MarkdownLinkInline link => link.Inlines.Count > 0
                 ? GetPlainTextLength(link.Inlines)
@@ -114,6 +114,12 @@ internal static class MarkdownClipboardTextHelpers
     public static bool IsDataUri(string? url)
         => !string.IsNullOrWhiteSpace(url) && url.StartsWith("data:", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Canonical length of an inline formula in the text stream: TeX plus the
+    /// Pandoc delimiters the text map keeps around it (ADR-0012).
+    /// </summary>
+    public static int MathInlineTextLength(MarkdownMathInline math) => math.Content.Length + 4;
+
     public static void TrimTrailingLineBreaks(StringBuilder builder, int maxAllowed)
     {
         var trailing = 0;
@@ -150,7 +156,7 @@ internal static class MarkdownClipboardTextHelpers
                 break;
 
             case MarkdownMathInline math:
-                builder.Append(math.Content);
+                builder.Append(@"\(").Append(math.Content).Append(@"\)");
                 break;
 
             case MarkdownImageInline image:
