@@ -43,6 +43,9 @@ public sealed partial class MarkdownDocumentView
             HorizontalAlignment = HorizontalAlignment.Stretch
         };
 
+        // ADR-0011 §6 (решение владельца §5.1): стартово колонки нейтральные
+        // 1*; первый расчёт ширин — отложенно, на первом measure, когда
+        // доступная ширина известна (см. AttachTableLayoutPipeline).
         for (var columnIndex = 0; columnIndex < columnCount; columnIndex++)
         {
             grid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(1, GridUnitType.Star)));
@@ -56,8 +59,10 @@ public sealed partial class MarkdownDocumentView
 
         // Design `.mm-table` switches to the sans stack at 0.92em of body.
         var sansFontFamily = LookupFontFamily("MmDocumentSansFontFamily");
-        var bodyCellFontSize = ReadingPreferences.FontSize * 0.92;
-        var headerCellFontSize = ReadingPreferences.FontSize * 0.85;
+        var bodyCellFontSize = MarkdownTableLayoutConstants.GetBodyFontSize(step: 0, ReadingPreferences.FontSize);
+        var headerCellFontSize = MarkdownTableLayoutConstants.GetHeaderFontSize(step: 0, ReadingPreferences.FontSize);
+
+        var state = new MarkdownTableLayoutState(table, grid, columnCount, sansFontFamily);
 
         // Index of the last *data* row (not the header). Used to suppress
         // the trailing bottom border so the table does not end on a line.
@@ -67,7 +72,7 @@ public sealed partial class MarkdownDocumentView
         if (table.Header.Count > 0)
         {
             AddTableRow(
-                grid, table.Header, currentRow,
+                state, grid, table.Header, currentRow,
                 isHeader: true, isLastDataRow: false,
                 pathPrefix: $"{path}.h",
                 fontFamily: sansFontFamily,
@@ -79,7 +84,7 @@ public sealed partial class MarkdownDocumentView
         for (var rowIndex = 0; rowIndex < table.Rows.Count; rowIndex++)
         {
             AddTableRow(
-                grid, table.Rows[rowIndex], currentRow,
+                state, grid, table.Rows[rowIndex], currentRow,
                 isHeader: false, isLastDataRow: currentRow == lastDataRowIndex,
                 pathPrefix: $"{path}.r{rowIndex}.c",
                 fontFamily: sansFontFamily,
@@ -88,16 +93,22 @@ public sealed partial class MarkdownDocumentView
             currentRow++;
         }
 
-        return new Border
+        var border = new Border
         {
             Classes = { "mm-md-table" },
             Child = grid,
             // Design `.mm-table` margin is 1.4em top and bottom.
             Margin = new Thickness(0, (int)(ReadingPreferences.FontSize * 1.4), 0, (int)(ReadingPreferences.FontSize * 1.4))
         };
+
+        state.Host = border;
+        AttachTableLayoutPipeline(state);
+
+        return border;
     }
 
     private void AddTableRow(
+        MarkdownTableLayoutState state,
         Grid grid,
         IReadOnlyList<MarkdownTableCell> cells,
         int rowIndex,
@@ -166,6 +177,10 @@ public sealed partial class MarkdownDocumentView
             Grid.SetRow(border, rowIndex);
             Grid.SetColumn(border, columnIndex);
             grid.Children.Add(border);
+
+            // Пайплайну ADR-0011 нужны ячейки для деградации шрифтов/паддингов
+            // и тултипов скролл-режима.
+            state.Cells.Add(new MarkdownTableCellLayout(border, content, cell, isHeader, columnIndex));
         }
     }
 }
